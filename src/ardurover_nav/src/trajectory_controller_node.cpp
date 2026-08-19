@@ -1,10 +1,13 @@
 #include "ardurover_nav/path_io.hpp"
 
+#include <geometry_msgs/msg/point.hpp>
 #include <geometry_msgs/msg/twist.hpp>
 #include <mavros_msgs/srv/command_bool.hpp>
 #include <mavros_msgs/srv/set_mode.hpp>
 #include <nav_msgs/msg/odometry.hpp>
 #include <rclcpp/rclcpp.hpp>
+#include <visualization_msgs/msg/marker.hpp>
+#include <visualization_msgs/msg/marker_array.hpp>
 
 #include <algorithm>
 #include <chrono>
@@ -32,6 +35,10 @@ class TrajectoryControllerNode : public rclcpp::Node {
             "/mavros/setpoint_velocity/cmd_vel_unstamped",
             10
         );
+        markerPub_ = create_publisher<visualization_msgs::msg::MarkerArray>(
+            "/path_markers",
+            rclcpp::QoS(1).transient_local()
+        );
         odomSub_ = create_subscription<nav_msgs::msg::Odometry>(
             "/ground_truth/odom",
             10,
@@ -40,6 +47,14 @@ class TrajectoryControllerNode : public rclcpp::Node {
         arming_ = create_client<mavros_msgs::srv::CommandBool>("/mavros/cmd/arming");
         setMode_ = create_client<mavros_msgs::srv::SetMode>("/mavros/set_mode");
         paramClient_ = std::make_shared<rclcpp::AsyncParametersClient>(this, "/mavros/setpoint_velocity");
+
+        for (const auto& waypoint : path_) {
+            geometry_msgs::msg::Point point;
+            point.x = waypoint.x;
+            point.y = waypoint.y;
+            point.z = 0.05;
+            refPoints_.push_back(point);
+        }
 
         timer_ = create_wall_timer(
             std::chrono::duration<double>(1.0 / rateHz),
@@ -69,6 +84,9 @@ class TrajectoryControllerNode : public rclcpp::Node {
     }
 
     void OnTimer() {
+        UpdateDrivenPath();
+        PublishPathMarkers();
+
         if (setupState_ != SetupState::Ready) {
             AdvanceSetup();
             geometry_msgs::msg::Twist prime;
@@ -135,10 +153,60 @@ class TrajectoryControllerNode : public rclcpp::Node {
         }
     }
 
+    void UpdateDrivenPath() {
+        if (!latestOdom_) {
+            return;
+        }
+        const auto& pos = latestOdom_->pose.pose.position;
+        if (!drivenPoints_.empty()) {
+            const auto& last = drivenPoints_.back();
+            const double dx = pos.x - last.x;
+            const double dy = pos.y - last.y;
+            if (dx * dx + dy * dy < 0.0025) {
+                return;
+            }
+        }
+        drivenPoints_.push_back(pos);
+    }
+
+    visualization_msgs::msg::Marker MakeStrip(
+        int id,
+        const char* ns,
+        float r,
+        float g,
+        float b,
+        const std::vector<geometry_msgs::msg::Point>& points
+    ) const {
+        visualization_msgs::msg::Marker marker;
+        marker.header.frame_id = "map";
+        marker.header.stamp = now();
+        marker.ns = ns;
+        marker.id = id;
+        marker.type = visualization_msgs::msg::Marker::LINE_STRIP;
+        marker.action = visualization_msgs::msg::Marker::ADD;
+        marker.pose.orientation.w = 1.0;
+        marker.scale.x = 0.08;
+        marker.color.r = r;
+        marker.color.g = g;
+        marker.color.b = b;
+        marker.color.a = 1.0;
+        marker.points = points;
+        return marker;
+    }
+
+    void PublishPathMarkers() {
+        visualization_msgs::msg::MarkerArray msg;
+        msg.markers.push_back(MakeStrip(0, "ref_path", 0.1f, 0.85f, 0.15f, refPoints_));
+        msg.markers.push_back(MakeStrip(1, "driven_path", 0.95f, 0.15f, 0.1f, drivenPoints_));
+        markerPub_->publish(msg);
+    }
+
     std::string pathFile_;
     double vMax_{1.2};
     double wMax_{1.0};
     std::vector<Waypoint> path_;
+    std::vector<geometry_msgs::msg::Point> refPoints_;
+    std::vector<geometry_msgs::msg::Point> drivenPoints_;
     nav_msgs::msg::Odometry::ConstSharedPtr latestOdom_;
 
     SetupState setupState_{SetupState::WaitServices};
@@ -147,6 +215,7 @@ class TrajectoryControllerNode : public rclcpp::Node {
     std::shared_future<mavros_msgs::srv::CommandBool::Response::SharedPtr> armFuture_;
 
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmdPub_;
+    rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr markerPub_;
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odomSub_;
     rclcpp::Client<mavros_msgs::srv::CommandBool>::SharedPtr arming_;
     rclcpp::Client<mavros_msgs::srv::SetMode>::SharedPtr setMode_;
@@ -162,3 +231,4 @@ int main(int argc, char** argv) {
     rclcpp::shutdown();
     return 0;
 }
+ 

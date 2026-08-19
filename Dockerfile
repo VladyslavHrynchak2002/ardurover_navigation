@@ -63,6 +63,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-jazzy-mavros-msgs \
     ros-jazzy-launch-ros \
     ros-jazzy-ros2launch \
+    ros-jazzy-rviz2 \
     geographiclib-tools \
     && rm -rf /var/lib/apt/lists/*
 

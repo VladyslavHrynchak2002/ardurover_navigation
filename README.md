@@ -29,7 +29,7 @@ ros2 launch ardurover_nav sim.launch.py
 
 This starts Gazebo, ArduRover SITL, the Gazebo→ROS pose bridge, and MAVROS.
 
-The Wild Thumper 6WD skid-steer rover always spawns on the Baylands map at **(0, 0, 0.2)** facing +X (east). The first Gazebo start may download the map from Fuel.
+The Clearpath Husky A200 skid-steer rover always spawns on the Baylands map at **(0, 0, 0.25)** facing +X (east). The first Gazebo start may download the map from Fuel.
 
 ### Record a path
 
@@ -89,7 +89,7 @@ Higher is better. A perfect run on the line to the end is 100.
 | `src/ardurover_nav/src/path_recorder_node.cpp` | Records Gazebo pose |
 | `src/ardurover_nav/src/path_scorer_node.cpp` | Score |
 | `sim/worlds/baylands.sdf` | Map |
-| `sim/models/wildthumper/` | Rover |
+| `sim/models/clearpath_husky/` | Rover |
 | `paths/` | Path files (`x y yaw`) |
 
 ## Notes

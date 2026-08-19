@@ -13,8 +13,10 @@
   <depend>geometry_msgs</depend>
   <depend>nav_msgs</depend>
   <depend>mavros_msgs</depend>
+  <depend>visualization_msgs</depend>
 
   <exec_depend>ros2launch</exec_depend>
+  <exec_depend>rviz2</exec_depend>
   <exec_depend>ros_gz_bridge</exec_depend>
   <exec_depend>mavros</exec_depend>
 
