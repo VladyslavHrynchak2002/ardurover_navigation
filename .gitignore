@@ -1,0 +1,8 @@
+build/
+install/
+log/
+.sitl/
+*.pyc
+__pycache__/
+paths/*.path
+!paths/example.path
