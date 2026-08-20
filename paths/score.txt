@@ -1,7 +1,7 @@
-reason: timeout
-score: 26.3848
-completion: 0.263849
-rms_cross_track_m: 1.51823e-06
-max_cross_track_m: 1.79021e-06
+reason: stopped
+score: 0.0017787
+completion: 1.79027e-05
+rms_cross_track_m: 0.00248464
+max_cross_track_m: 0.0126679
 goal_reached: false
-samples: 1801
+samples: 64

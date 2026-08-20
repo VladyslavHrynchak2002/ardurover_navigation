@@ -4,6 +4,7 @@
 #include <rclcpp/rclcpp.hpp>
 
 #include <chrono>
+#include <cstdlib>
 #include <functional>
 #include <memory>
 #include <string>
@@ -14,7 +15,11 @@ namespace ardurover_nav {
 class PathRecorderNode : public rclcpp::Node {
   public:
     PathRecorderNode() : Node("path_recorder_node") {
-        outputFile_ = declare_parameter("output_file", std::string("paths/recorded.path"));
+        std::string defaultFile = "paths/recorded.path";
+        if (const char* root = std::getenv("ARDUROVER_NAV_ROOT")) {
+            defaultFile = std::string(root) + "/paths/recorded.path";
+        }
+        outputFile_ = declare_parameter("output_file", defaultFile);
         const double periodS = declare_parameter("sample_period_s", 0.2);
 
         odomSub_ = create_subscription<nav_msgs::msg::Odometry>(

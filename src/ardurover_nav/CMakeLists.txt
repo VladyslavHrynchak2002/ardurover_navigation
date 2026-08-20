@@ -16,7 +16,9 @@ add_executable(path_recorder_node src/path_recorder_node.cpp)
 target_include_directories(path_recorder_node PRIVATE include)
 ament_target_dependencies(path_recorder_node rclcpp nav_msgs)
 
-add_executable(trajectory_controller_node src/trajectory_controller_node.cpp)
+add_executable(trajectory_controller_node
+  src/trajectory_controller_node.cpp
+  src/ardurover_controller.cpp)
 target_include_directories(trajectory_controller_node PRIVATE include)
 ament_target_dependencies(trajectory_controller_node rclcpp geometry_msgs nav_msgs mavros_msgs visualization_msgs)
 

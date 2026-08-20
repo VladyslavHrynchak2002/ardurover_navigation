@@ -78,7 +78,7 @@ Visualization Manager:
       Enabled: true
       Name: Paths
       Namespaces:
-        ref_path: true
+        target_path: true
         driven_path: true
       Topic:
         Depth: 5

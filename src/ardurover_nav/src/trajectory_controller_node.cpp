@@ -1,9 +1,8 @@
+#include "ardurover_nav/ardurover_controller.hpp"
 #include "ardurover_nav/path_io.hpp"
 
 #include <geometry_msgs/msg/point.hpp>
 #include <geometry_msgs/msg/twist.hpp>
-#include <mavros_msgs/srv/command_bool.hpp>
-#include <mavros_msgs/srv/set_mode.hpp>
 #include <nav_msgs/msg/odometry.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <visualization_msgs/msg/marker.hpp>
@@ -11,8 +10,8 @@
 
 #include <algorithm>
 #include <chrono>
-#include <cmath>
 #include <functional>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -27,8 +26,8 @@ class TrajectoryControllerNode : public rclcpp::Node {
         controlEnabled_ = declare_parameter("control_enabled", true);
         const double rateHz = declare_parameter("control_rate_hz", 20.0);
 
-        path_ = load_path(pathFile_);
-        if (path_.empty()) {
+        auto path = load_path(pathFile_);
+        if (path.empty()) {
             throw std::runtime_error("Path file is empty: " + pathFile_);
         }
 
@@ -45,17 +44,16 @@ class TrajectoryControllerNode : public rclcpp::Node {
             10,
             [this](nav_msgs::msg::Odometry::ConstSharedPtr msg) { latestOdom_ = std::move(msg); }
         );
-        arming_ = create_client<mavros_msgs::srv::CommandBool>("/mavros/cmd/arming");
-        setMode_ = create_client<mavros_msgs::srv::SetMode>("/mavros/set_mode");
-        paramClient_ = std::make_shared<rclcpp::AsyncParametersClient>(this, "/mavros/setpoint_velocity");
 
-        for (const auto& waypoint : path_) {
+        for (const auto& waypoint : path) {
             geometry_msgs::msg::Point point;
             point.x = waypoint.x;
             point.y = waypoint.y;
             point.z = 0.05;
             refPoints_.push_back(point);
         }
+
+        controller_ = std::make_unique<ArduroverController>(*this, std::move(path));
 
         timer_ = create_wall_timer(
             std::chrono::duration<double>(1.0 / rateHz),
@@ -64,23 +62,20 @@ class TrajectoryControllerNode : public rclcpp::Node {
 
         RCLCPP_INFO_STREAM(
             get_logger(),
-            "Loaded " << path_.size() << " waypoints from " << pathFile_
+            "Loaded " << refPoints_.size() << " waypoints from " << pathFile_
         );
     }
 
   private:
-    enum class SetupState { WaitServices, SetFrame, Prime, SetMode, Arm, Ready };
-
     void OnTimer() {
         UpdateDrivenPath();
-        PublishPathMarkers();
+        DrawTargetAndDrivenPath();
 
         if (!controlEnabled_) {
             return;
         }
 
-        if (setupState_ != SetupState::Ready) {
-            AdvanceSetup();
+        if (!controller_->SetupArdurover()) {
             geometry_msgs::msg::Twist prime;
             prime.linear.x = 0.001;
             cmdPub_->publish(prime);
@@ -91,71 +86,10 @@ class TrajectoryControllerNode : public rclcpp::Node {
             return;
         }
 
-        geometry_msgs::msg::Twist command = ComputeCommand(*latestOdom_);
+        geometry_msgs::msg::Twist command = controller_->Control(*latestOdom_);
         command.linear.x = std::clamp(command.linear.x, -vMax_, vMax_);
         command.angular.z = std::clamp(command.angular.z, -wMax_, wMax_);
         cmdPub_->publish(command);
-    }
-
-    void AdvanceSetup() {
-        switch (setupState_) {
-            case SetupState::WaitServices:
-                if (arming_->service_is_ready() && setMode_->service_is_ready()) {
-                    setupState_ = SetupState::SetFrame;
-                }
-                return;
-            case SetupState::SetFrame:
-                if (!paramClient_->service_is_ready()) {
-                    return;
-                }
-                paramClient_->set_parameters({rclcpp::Parameter("mav_frame", "BODY_NED")});
-                RCLCPP_INFO(get_logger(), "Setpoint frame set to BODY_NED");
-                setupState_ = SetupState::Prime;
-                primeTicks_ = 0;
-                return;
-            case SetupState::Prime:
-                ++primeTicks_;
-                if (primeTicks_ >= 20) {
-                    setupState_ = SetupState::SetMode;
-                }
-                return;
-            case SetupState::SetMode:
-                if (!modeFuture_.valid()) {
-                    auto req = std::make_shared<mavros_msgs::srv::SetMode::Request>();
-                    req->custom_mode = "GUIDED";
-                    modeFuture_ = setMode_->async_send_request(req).future.share();
-                    RCLCPP_INFO(get_logger(), "Requesting GUIDED");
-                } else if (modeFuture_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
-                    setupState_ = SetupState::Arm;
-                }
-                return;
-            case SetupState::Arm:
-                if (!armFuture_.valid()) {
-                    auto req = std::make_shared<mavros_msgs::srv::CommandBool::Request>();
-                    req->value = true;
-                    armFuture_ = arming_->async_send_request(req).future.share();
-                    RCLCPP_INFO(get_logger(), "Requesting arm");
-                } else if (armFuture_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
-                    setupState_ = SetupState::Ready;
-                    RCLCPP_INFO(get_logger(), "Controller running");
-                }
-                return;
-            case SetupState::Ready:
-                return;
-        }
-    }
-
-    // Implement path following here.
-    //
-    // Input:  latest Gazebo pose/twist in latestOdom_, reference path in path_
-    //         (x, y in metres, yaw in radians, world ENU, no timestamps).
-    // Output: body-frame Twist on /mavros/setpoint_velocity/cmd_vel_unstamped
-    //         linear.x  = forward speed (m/s)
-    //         angular.z = yaw rate (rad/s)
-    // Do not upload missions or publish position setpoints.
-    geometry_msgs::msg::Twist ComputeCommand(const nav_msgs::msg::Odometry& /*state*/) {
-        geometry_msgs::msg::Twist command;
-        return command;
     }
 
     void UpdateDrivenPath() {
@@ -174,7 +108,18 @@ class TrajectoryControllerNode : public rclcpp::Node {
         drivenPoints_.push_back(pos);
     }
 
-    visualization_msgs::msg::Marker MakeStrip(
+    void DrawTargetAndDrivenPath() {
+        visualization_msgs::msg::MarkerArray msg;
+        msg.markers.push_back(MakeLineStrip(0, "target_path", 0.1f, 0.85f, 0.15f, refPoints_));
+        if (drivenPoints_.size() >= 2) {
+            msg.markers.push_back(
+                MakeLineStrip(1, "driven_path", 0.95f, 0.15f, 0.1f, drivenPoints_)
+            );
+        }
+        markerPub_->publish(msg);
+    }
+
+    visualization_msgs::msg::Marker MakeLineStrip(
         int id,
         const char* ns,
         float r,
@@ -202,37 +147,18 @@ class TrajectoryControllerNode : public rclcpp::Node {
         return marker;
     }
 
-    void PublishPathMarkers() {
-        visualization_msgs::msg::MarkerArray msg;
-        msg.markers.push_back(MakeStrip(0, "ref_path", 0.1f, 0.85f, 0.15f, refPoints_));
-        if (drivenPoints_.size() >= 2) {
-            msg.markers.push_back(
-                MakeStrip(1, "driven_path", 0.95f, 0.15f, 0.1f, drivenPoints_)
-            );
-        }
-        markerPub_->publish(msg);
-    }
-
     std::string pathFile_;
     double vMax_{1.2};
     double wMax_{1.0};
     bool controlEnabled_{true};
-    std::vector<Waypoint> path_;
     std::vector<geometry_msgs::msg::Point> refPoints_;
     std::vector<geometry_msgs::msg::Point> drivenPoints_;
     nav_msgs::msg::Odometry::ConstSharedPtr latestOdom_;
-
-    SetupState setupState_{SetupState::WaitServices};
-    int primeTicks_{0};
-    std::shared_future<mavros_msgs::srv::SetMode::Response::SharedPtr> modeFuture_;
-    std::shared_future<mavros_msgs::srv::CommandBool::Response::SharedPtr> armFuture_;
+    std::unique_ptr<ArduroverController> controller_;
 
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmdPub_;
     rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr markerPub_;
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odomSub_;
-    rclcpp::Client<mavros_msgs::srv::CommandBool>::SharedPtr arming_;
-    rclcpp::Client<mavros_msgs::srv::SetMode>::SharedPtr setMode_;
-    rclcpp::AsyncParametersClient::SharedPtr paramClient_;
     rclcpp::TimerBase::SharedPtr timer_;
 };
 
@@ -244,4 +170,3 @@ int main(int argc, char** argv) {
     rclcpp::shutdown();
     return 0;
 }
- 

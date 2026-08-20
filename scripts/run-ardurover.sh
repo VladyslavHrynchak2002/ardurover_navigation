@@ -10,12 +10,12 @@ cd "${SITL_DIR}"
 
 export PATH="${HOME}/.local/bin:${PATH}"
 
-# Match sim/worlds/baylands.sdf spherical_coordinates. Yaw 90 deg = rover +X (east) at spawn.
+# Match husky spawn in sim/worlds/baylands.sdf. Heading 157 deg from the live pose.
 exec "${ARDUPILOT_DIR}/Tools/autotest/sim_vehicle.py" \
   -v Rover \
   --no-rebuild \
   --model JSON \
-  --custom-location 37.412173071650805,-121.998878727967,38,90 \
+  --custom-location 37.412064043623495,-121.998765563356230,37.850,157 \
   --out 127.0.0.1:14551 \
   --out 127.0.0.1:14550 \
   --add-param-file "${ARDUPILOT_DIR}/Tools/autotest/default_params/rover-skid.parm" \

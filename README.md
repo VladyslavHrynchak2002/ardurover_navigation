@@ -27,9 +27,9 @@ source install/setup.bash
 ros2 launch ardurover_nav sim.launch.py
 ```
 
-This starts Gazebo, ArduRover SITL, the Gazebo→ROS pose bridge, and MAVROS.
+This starts Gazebo, ArduRover SITL, the Gazebo→ROS pose bridge, and MAVROS. After it is up, you can run the recorder in another shell.
 
-The Clearpath Husky A200 skid-steer rover always spawns on the Baylands map at **(0, 0, 0.25)** facing +X (east). The first Gazebo start may download the map from Fuel.
+The Clearpath Husky A200 skid-steer rover always spawns on the Baylands map at **(10.006, -12.137, -0.15)** with yaw **-1.169 rad**. The first Gazebo start may download the map from Fuel.
 
 ### Record a path
 
@@ -39,25 +39,30 @@ The Clearpath Husky A200 skid-steer rover always spawns on the Baylands map at *
 
 ```bash
 source install/setup.bash
-ros2 run ardurover_nav path_recorder_node --ros-args \
-  -p output_file:=/home/developer/ardurover_navigation/paths/recorded.path
+ros2 run ardurover_nav path_recorder_node
 ```
 
-The node samples `x y yaw` every 200 ms from `/ground_truth/odom`. Ctrl+C writes the file.
+The node samples `x y yaw` every 200 ms from `/ground_truth/odom` and writes `paths/recorded.path` by default. Ctrl+C writes the file.
 
 Restart the sim (or the whole launch) so the rover is back at the spawn pose before following.
 
 ### Follow a path
 
-Edit `ComputeCommand()` in `src/ardurover_nav/src/trajectory_controller_node.cpp`, then `./scripts/build.sh`.
+Edit `Control()` in `src/ardurover_nav/src/ardurover_controller.cpp`, then `./scripts/build.sh`.
 
 ```bash
 source install/setup.bash
-ros2 launch ardurover_nav follow.launch.py \
-  path_file:=/home/developer/ardurover_navigation/paths/recorded.path
+ros2 launch ardurover_nav control.launch.py
 ```
 
-`paths/example.path` is a rectangle from spawn if you want to try without recording.
+This starts the simulation, RViz, and the controller. The reference path is green; the driven path is red. By default it follows `paths/recorded.path`.
+
+`paths/example.path` is a rectangle from spawn if you want to try without recording:
+
+```bash
+ros2 launch ardurover_nav control.launch.py \
+  path_file:=/home/developer/ardurover_navigation/paths/example.path
+```
 
 The node arms ArduRover, switches to GUIDED, and publishes body-frame velocity setpoints. You only implement the command.
 
@@ -70,7 +75,7 @@ Do not upload missions or use position setpoints.
 
 ### Score
 
-`path_scorer_node` (started by `follow.launch.py`) samples the rover pose and writes `paths/score.txt` when the last waypoint is reached (within 1 m for 1 s) or after 180 s:
+`path_scorer_node` (started by `control.launch.py`) samples the rover pose and writes `paths/score.txt` when the last waypoint is reached (within 1 m for 1 s) or after 180 s:
 
 ```
 score = 100 * completion * exp(-rms_cte / 0.75) * exp(-max_cte / 4.0)
@@ -85,7 +90,7 @@ Higher is better. A perfect run on the line to the end is 100.
 
 | Path | Role |
 |---|---|
-| `src/ardurover_nav/src/trajectory_controller_node.cpp` | Your controller |
+| `src/ardurover_nav/src/ardurover_controller.cpp` | Your controller |
 | `src/ardurover_nav/src/path_recorder_node.cpp` | Records Gazebo pose |
 | `src/ardurover_nav/src/path_scorer_node.cpp` | Score |
 | `sim/worlds/baylands.sdf` | Map |
@@ -94,5 +99,4 @@ Higher is better. A perfect run on the line to the end is 100.
 
 ## Notes
 
-- `./scripts/reset_rover.sh` teleports the Gazebo model only. Prefer restarting `sim.launch.py` so ArduRover and Gazebo stay aligned.
 - Headless Gazebo: `ros2 launch ardurover_nav sim.launch.py gz_gui:=false`
