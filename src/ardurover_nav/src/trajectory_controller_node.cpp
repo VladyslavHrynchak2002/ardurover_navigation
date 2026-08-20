@@ -21,9 +21,10 @@ namespace ardurover_nav {
 class TrajectoryControllerNode : public rclcpp::Node {
   public:
     TrajectoryControllerNode() : Node("trajectory_controller_node") {
-        pathFile_ = declare_parameter("path_file", std::string("paths/example.path"));
+        pathFile_ = declare_parameter("path_file", std::string("paths/recorded.path"));
         vMax_ = declare_parameter("v_max", 1.2);
         wMax_ = declare_parameter("w_max", 1.0);
+        controlEnabled_ = declare_parameter("control_enabled", true);
         const double rateHz = declare_parameter("control_rate_hz", 20.0);
 
         path_ = load_path(pathFile_);
@@ -70,22 +71,13 @@ class TrajectoryControllerNode : public rclcpp::Node {
   private:
     enum class SetupState { WaitServices, SetFrame, Prime, SetMode, Arm, Ready };
 
-    // Implement path following here.
-    //
-    // Input:  latest Gazebo pose/twist in latestOdom_, reference path in path_
-    //         (x, y in metres, yaw in radians, world ENU, no timestamps).
-    // Output: body-frame Twist on /mavros/setpoint_velocity/cmd_vel_unstamped
-    //         linear.x  = forward speed (m/s)
-    //         angular.z = yaw rate (rad/s)
-    // Do not upload missions or publish position setpoints.
-    geometry_msgs::msg::Twist ComputeCommand(const nav_msgs::msg::Odometry& /*state*/) {
-        geometry_msgs::msg::Twist command;
-        return command;
-    }
-
     void OnTimer() {
         UpdateDrivenPath();
         PublishPathMarkers();
+
+        if (!controlEnabled_) {
+            return;
+        }
 
         if (setupState_ != SetupState::Ready) {
             AdvanceSetup();
@@ -153,6 +145,19 @@ class TrajectoryControllerNode : public rclcpp::Node {
         }
     }
 
+    // Implement path following here.
+    //
+    // Input:  latest Gazebo pose/twist in latestOdom_, reference path in path_
+    //         (x, y in metres, yaw in radians, world ENU, no timestamps).
+    // Output: body-frame Twist on /mavros/setpoint_velocity/cmd_vel_unstamped
+    //         linear.x  = forward speed (m/s)
+    //         angular.z = yaw rate (rad/s)
+    // Do not upload missions or publish position setpoints.
+    geometry_msgs::msg::Twist ComputeCommand(const nav_msgs::msg::Odometry& /*state*/) {
+        geometry_msgs::msg::Twist command;
+        return command;
+    }
+
     void UpdateDrivenPath() {
         if (!latestOdom_) {
             return;
@@ -179,13 +184,16 @@ class TrajectoryControllerNode : public rclcpp::Node {
     ) const {
         visualization_msgs::msg::Marker marker;
         marker.header.frame_id = "map";
-        marker.header.stamp = now();
+        marker.header.stamp = rclcpp::Time(0, 0, get_clock()->get_clock_type());
         marker.ns = ns;
         marker.id = id;
         marker.type = visualization_msgs::msg::Marker::LINE_STRIP;
         marker.action = visualization_msgs::msg::Marker::ADD;
+        marker.frame_locked = true;
         marker.pose.orientation.w = 1.0;
-        marker.scale.x = 0.08;
+        marker.scale.x = 0.12;
+        marker.scale.y = 1.0;
+        marker.scale.z = 1.0;
         marker.color.r = r;
         marker.color.g = g;
         marker.color.b = b;
@@ -197,13 +205,18 @@ class TrajectoryControllerNode : public rclcpp::Node {
     void PublishPathMarkers() {
         visualization_msgs::msg::MarkerArray msg;
         msg.markers.push_back(MakeStrip(0, "ref_path", 0.1f, 0.85f, 0.15f, refPoints_));
-        msg.markers.push_back(MakeStrip(1, "driven_path", 0.95f, 0.15f, 0.1f, drivenPoints_));
+        if (drivenPoints_.size() >= 2) {
+            msg.markers.push_back(
+                MakeStrip(1, "driven_path", 0.95f, 0.15f, 0.1f, drivenPoints_)
+            );
+        }
         markerPub_->publish(msg);
     }
 
     std::string pathFile_;
     double vMax_{1.2};
     double wMax_{1.0};
+    bool controlEnabled_{true};
     std::vector<Waypoint> path_;
     std::vector<geometry_msgs::msg::Point> refPoints_;
     std::vector<geometry_msgs::msg::Point> drivenPoints_;

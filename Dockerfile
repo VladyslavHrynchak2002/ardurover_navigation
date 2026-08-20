@@ -11,6 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     cmake \
     build-essential \
     clangd \
+    clang-format \
     ccache \
     gawk \
     pkg-config \

@@ -78,7 +78,8 @@ Visualization Manager:
       Enabled: true
       Name: Paths
       Namespaces:
-        {}
+        ref_path: true
+        driven_path: true
       Topic:
         Depth: 5
         Durability Policy: Transient Local

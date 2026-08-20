@@ -57,6 +57,18 @@ def generate_launch_description() -> LaunchDescription:
             )
         ],
     )
+    path_viz = Node(
+        package="ardurover_nav",
+        executable="trajectory_controller_node",
+        name="path_visualizer",
+        output="screen",
+        parameters=[
+            {
+                "path_file": os.path.join(WORKSPACE, "paths", "recorded.path"),
+                "control_enabled": False,
+            }
+        ],
+    )
     rviz = Node(
         package="rviz2",
         executable="rviz2",
@@ -68,4 +80,4 @@ def generate_launch_description() -> LaunchDescription:
         output="screen",
     )
 
-    return LaunchDescription([gz_gui, gz, bridge, ardurover, mavros, rviz])
+    return LaunchDescription([gz_gui, gz, bridge, ardurover, mavros, path_viz, rviz])
