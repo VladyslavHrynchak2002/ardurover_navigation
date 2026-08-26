@@ -88,7 +88,7 @@ ros2 launch ardurover_nav control.launch.py path_file:=/home/developer/ardurover
 
 ## VS Code / Cursor
 
-Attaching the editor to the container is optional. See [dev-env-setup.md](dev-env-setup.md).
+Attaching the editor to the container is optional. See [ide-setup.md](ide-setup.md).
 
 ## Connect from QGroundControl
 
