@@ -1,14 +1,13 @@
 #pragma once
 
-#include "ardurover_nav/path_io.hpp"
-
 #include <geometry_msgs/msg/twist.hpp>
 #include <mavros_msgs/srv/command_bool.hpp>
 #include <mavros_msgs/srv/set_mode.hpp>
 #include <nav_msgs/msg/odometry.hpp>
 #include <rclcpp/rclcpp.hpp>
-
 #include <vector>
+
+#include "ardurover_nav/path_io.hpp"
 
 namespace ardurover_nav {
 

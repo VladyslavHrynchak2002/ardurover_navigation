@@ -1,17 +1,16 @@
-#include "ardurover_nav/path_io.hpp"
-
-#include <nav_msgs/msg/odometry.hpp>
-#include <rclcpp/rclcpp.hpp>
-
 #include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <fstream>
 #include <limits>
+#include <nav_msgs/msg/odometry.hpp>
 #include <optional>
+#include <rclcpp/rclcpp.hpp>
 #include <string>
 #include <utility>
 #include <vector>
+
+#include "ardurover_nav/path_io.hpp"
 
 namespace ardurover_nav {
 namespace {
@@ -30,10 +29,7 @@ double point_to_segment(double px, double py, double ax, double ay, double bx, d
 double cross_track(double px, double py, const std::vector<Waypoint>& path) {
     double best = std::numeric_limits<double>::infinity();
     for (size_t i = 1; i < path.size(); ++i) {
-        best = std::min(
-            best,
-            point_to_segment(px, py, path[i - 1].x, path[i - 1].y, path[i].x, path[i].y)
-        );
+        best = std::min(best, point_to_segment(px, py, path[i - 1].x, path[i - 1].y, path[i].x, path[i].y));
     }
     if (!std::isfinite(best) && !path.empty()) {
         best = std::hypot(px - path.front().x, py - path.front().y);
@@ -67,9 +63,7 @@ double progress_along_path(double px, double py, const std::vector<Waypoint>& pa
         const double aby = by - ay;
         const double segLen = std::hypot(abx, aby);
         const double length2 = abx * abx + aby * aby;
-        const double t = (length2 < 1e-12)
-            ? 0.0
-            : std::clamp(((px - ax) * abx + (py - ay) * aby) / length2, 0.0, 1.0);
+        const double t = (length2 < 1e-12) ? 0.0 : std::clamp(((px - ax) * abx + (py - ay) * aby) / length2, 0.0, 1.0);
         const double dist = std::hypot(px - (ax + t * abx), py - (ay + t * aby));
         if (dist < bestDist) {
             bestDist = dist;
@@ -98,19 +92,13 @@ class PathScorerNode : public rclcpp::Node {
         pathLength_ = path_length(path_);
 
         odomSub_ = create_subscription<nav_msgs::msg::Odometry>(
-            "/ground_truth/odom",
-            10,
+            "/ground_truth/odom", 10,
             [this](nav_msgs::msg::Odometry::ConstSharedPtr msg) { latestOdom_ = std::move(msg); }
         );
-        timer_ = create_wall_timer(
-            std::chrono::duration<double>(1.0 / sampleHz),
-            std::bind(&PathScorerNode::OnTimer, this)
-        );
+        timer_ =
+            create_wall_timer(std::chrono::duration<double>(1.0 / sampleHz), std::bind(&PathScorerNode::OnTimer, this));
 
-        RCLCPP_INFO_STREAM(
-            get_logger(),
-            "Scoring " << path_.size() << " waypoints, timeout " << timeoutS_ << " s"
-        );
+        RCLCPP_INFO_STREAM(get_logger(), "Scoring " << path_.size() << " waypoints, timeout " << timeoutS_ << " s");
     }
 
     void Finish(const std::string& reason) {
@@ -130,12 +118,10 @@ class PathScorerNode : public rclcpp::Node {
         }
 
         const double rmsCte = samples_.empty() ? 0.0 : std::sqrt(sumSq / static_cast<double>(samples_.size()));
-        const double completion = pathLength_ < 1e-6
-            ? 0.0
-            : std::clamp(maxProgress / pathLength_, 0.0, 1.0);
-        const bool nearGoal = !samples_.empty() &&
-            std::hypot(samples_.back().first - path_.back().x, samples_.back().second - path_.back().y) <=
-                goalRadius_;
+        const double completion = pathLength_ < 1e-6 ? 0.0 : std::clamp(maxProgress / pathLength_, 0.0, 1.0);
+        const bool nearGoal =
+            !samples_.empty() &&
+            std::hypot(samples_.back().first - path_.back().x, samples_.back().second - path_.back().y) <= goalRadius_;
         const bool goalReached = nearGoal && completion >= 0.8;
         const double score = 100.0 * completion * std::exp(-rmsCte / 0.75) * std::exp(-maxCte / 4.0);
 
@@ -152,9 +138,8 @@ class PathScorerNode : public rclcpp::Node {
         out << "samples: " << samples_.size() << "\n";
 
         RCLCPP_INFO_STREAM(
-            get_logger(),
-            "Score " << score << " (completion=" << completion << ", rms_cte=" << rmsCte
-                     << " m, max_cte=" << maxCte << " m, goal=" << goalReached << ", " << reason << ")"
+            get_logger(), "Score " << score << " (completion=" << completion << ", rms_cte=" << rmsCte
+                                   << " m, max_cte=" << maxCte << " m, goal=" << goalReached << ", " << reason << ")"
         );
         RCLCPP_INFO_STREAM(get_logger(), "Wrote " << outputFile_);
         rclcpp::shutdown();

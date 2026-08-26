@@ -1,19 +1,18 @@
-#include "ardurover_nav/ardurover_controller.hpp"
-#include "ardurover_nav/path_io.hpp"
-
-#include <geometry_msgs/msg/point.hpp>
-#include <geometry_msgs/msg/twist.hpp>
-#include <nav_msgs/msg/odometry.hpp>
-#include <rclcpp/rclcpp.hpp>
-#include <visualization_msgs/msg/marker.hpp>
-#include <visualization_msgs/msg/marker_array.hpp>
-
 #include <algorithm>
 #include <chrono>
 #include <functional>
+#include <geometry_msgs/msg/point.hpp>
+#include <geometry_msgs/msg/twist.hpp>
 #include <memory>
+#include <nav_msgs/msg/odometry.hpp>
+#include <rclcpp/rclcpp.hpp>
 #include <string>
 #include <vector>
+#include <visualization_msgs/msg/marker.hpp>
+#include <visualization_msgs/msg/marker_array.hpp>
+
+#include "ardurover_nav/ardurover_controller.hpp"
+#include "ardurover_nav/path_io.hpp"
 
 namespace ardurover_nav {
 
@@ -21,8 +20,6 @@ class TrajectoryControllerNode : public rclcpp::Node {
   public:
     TrajectoryControllerNode() : Node("trajectory_controller_node") {
         pathFile_ = declare_parameter("path_file", std::string("paths/recorded.path"));
-        vMax_ = declare_parameter("v_max", 1.2);
-        wMax_ = declare_parameter("w_max", 1.0);
         controlEnabled_ = declare_parameter("control_enabled", true);
         const double rateHz = declare_parameter("control_rate_hz", 20.0);
 
@@ -31,17 +28,11 @@ class TrajectoryControllerNode : public rclcpp::Node {
             throw std::runtime_error("Path file is empty: " + pathFile_);
         }
 
-        cmdPub_ = create_publisher<geometry_msgs::msg::Twist>(
-            "/mavros/setpoint_velocity/cmd_vel_unstamped",
-            10
-        );
-        markerPub_ = create_publisher<visualization_msgs::msg::MarkerArray>(
-            "/path_markers",
-            rclcpp::QoS(1).transient_local()
-        );
+        cmdPub_ = create_publisher<geometry_msgs::msg::Twist>("/mavros/setpoint_velocity/cmd_vel_unstamped", 10);
+        markerPub_ =
+            create_publisher<visualization_msgs::msg::MarkerArray>("/path_markers", rclcpp::QoS(1).transient_local());
         odomSub_ = create_subscription<nav_msgs::msg::Odometry>(
-            "/ground_truth/odom",
-            10,
+            "/ground_truth/odom", 10,
             [this](nav_msgs::msg::Odometry::ConstSharedPtr msg) { latestOdom_ = std::move(msg); }
         );
 
@@ -56,14 +47,10 @@ class TrajectoryControllerNode : public rclcpp::Node {
         controller_ = std::make_unique<ArduroverController>(*this, std::move(path));
 
         timer_ = create_wall_timer(
-            std::chrono::duration<double>(1.0 / rateHz),
-            std::bind(&TrajectoryControllerNode::OnTimer, this)
+            std::chrono::duration<double>(1.0 / rateHz), std::bind(&TrajectoryControllerNode::OnTimer, this)
         );
 
-        RCLCPP_INFO_STREAM(
-            get_logger(),
-            "Loaded " << refPoints_.size() << " waypoints from " << pathFile_
-        );
+        RCLCPP_INFO_STREAM(get_logger(), "Loaded " << refPoints_.size() << " waypoints from " << pathFile_);
     }
 
   private:
@@ -87,8 +74,6 @@ class TrajectoryControllerNode : public rclcpp::Node {
         }
 
         geometry_msgs::msg::Twist command = controller_->Control(*latestOdom_);
-        command.linear.x = std::clamp(command.linear.x, -vMax_, vMax_);
-        command.angular.z = std::clamp(command.angular.z, -wMax_, wMax_);
         cmdPub_->publish(command);
     }
 
@@ -112,20 +97,13 @@ class TrajectoryControllerNode : public rclcpp::Node {
         visualization_msgs::msg::MarkerArray msg;
         msg.markers.push_back(MakeLineStrip(0, "target_path", 0.1f, 0.85f, 0.15f, refPoints_));
         if (drivenPoints_.size() >= 2) {
-            msg.markers.push_back(
-                MakeLineStrip(1, "driven_path", 0.95f, 0.15f, 0.1f, drivenPoints_)
-            );
+            msg.markers.push_back(MakeLineStrip(1, "driven_path", 0.95f, 0.15f, 0.1f, drivenPoints_));
         }
         markerPub_->publish(msg);
     }
 
     visualization_msgs::msg::Marker MakeLineStrip(
-        int id,
-        const char* ns,
-        float r,
-        float g,
-        float b,
-        const std::vector<geometry_msgs::msg::Point>& points
+        int id, const char* ns, float r, float g, float b, const std::vector<geometry_msgs::msg::Point>& points
     ) const {
         visualization_msgs::msg::Marker marker;
         marker.header.frame_id = "map";
@@ -148,8 +126,6 @@ class TrajectoryControllerNode : public rclcpp::Node {
     }
 
     std::string pathFile_;
-    double vMax_{1.2};
-    double wMax_{1.0};
     bool controlEnabled_{true};
     std::vector<geometry_msgs::msg::Point> refPoints_;
     std::vector<geometry_msgs::msg::Point> drivenPoints_;
