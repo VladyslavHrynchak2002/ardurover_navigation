@@ -16,7 +16,7 @@ class ArduroverController {
     ArduroverController(rclcpp::Node& node, std::vector<Waypoint> path);
 
     bool SetupArdurover();
-    geometry_msgs::msg::Twist Control(const nav_msgs::msg::Odometry& odom);
+    void Control(const nav_msgs::msg::Odometry& odom);
 
   private:
     enum class SetupState { WaitServices, SetFrame, Prime, SetMode, Arm, Ready };

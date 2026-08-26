@@ -1,102 +1,109 @@
 # ArduRover path-following assignment
 
-A skid-steer rover in Gazebo + ArduRover SITL. Drive it from QGroundControl, record the path from Gazebo ground truth, then implement a controller that follows that path.
+In this test assignment you will implement a path-following controller for a differential drive robot. The code already contains a setup built for you which includes:
 
-Localization is given (`/ground_truth/odom` from Gazebo). The task is the tracking law, not state estimation.
+- Gazebo simulation with a differential drive rover, ArduRover SITL, and MAVROS
+- A trajectory controller node that loads a path, reads ground-truth odometry (`/ground_truth/odom`), arms the rover, and switches it to GUIDED mode
+- A path recorder, a path scorer, and RViz visualization (reference path in green, driven path in red)
 
-## Host setup
+Localization is given. Your task is the tracking law: implement `Control()` in [`src/ardurover_nav/src/ardurover_controller.cpp`](src/ardurover_nav/src/ardurover_controller.cpp). You may change the controller class as needed.
 
-Needs Docker, X11, and [QGroundControl](https://docs.qgroundcontrol.com/master/en/qgc-user-guide/getting_started/download_and_install.html). A GPU is optional.
+There are two launch files:
 
-```bash
-cd /path/to/ardurover_navigation
-./docker/build.sh          # first time only, ~30–60 min
-./docker/run.sh            # opens a shell in the container
-```
+- `ros2 launch ardurover_nav sim.launch.py` — simulation only (Gazebo, ArduRover SITL, MAVROS). Use this to drive the rover from QGroundControl and record a path.
+- `ros2 launch ardurover_nav control.launch.py` — simulation plus your controller, RViz, and the scorer. This is the command that tests your controller.
 
-`./docker/run.sh` again attaches if the container already exists.
-
-Attaching VS Code or Cursor to the container is optional. See [dev-env-setup.md](dev-env-setup.md).
-
-## Inside the container
+After `./scripts/build.sh` and `source install/setup.bash`:
 
 ```bash
-./scripts/build.sh
-source install/setup.bash
-
-ros2 launch ardurover_nav sim.launch.py
+ros2 launch ardurover_nav control.launch.py path_file:=/home/developer/ardurover_navigation/paths/0-drive-straight.path
 ```
 
-This starts Gazebo, ArduRover SITL, the Gazebo→ROS pose bridge, and MAVROS. After it is up, you can run the recorder in another shell.
+Rebuild after you change the controller.
 
-The Clearpath Husky A200 skid-steer rover always spawns on the Baylands map at **(10.006, -12.137, -0.15)** with yaw **-1.169 rad**. The first Gazebo start may download the map from Fuel.
-
-### Record a path
-
-1. In QGroundControl on the host: add a UDP connection to `127.0.0.1:14550` (or it may auto-connect).
-2. Arm in **Manual** / **Acro** and drive with a joystick or QGC virtual joystick.
-3. In a second container shell (`./docker/attach.sh`):
-
-```bash
-source install/setup.bash
-ros2 run ardurover_nav path_recorder_node
-```
-
-The node samples `x y yaw` every 200 ms from `/ground_truth/odom` and writes `paths/recorded.path` by default. Ctrl+C writes the file.
-
-Restart the sim (or the whole launch) so the rover is back at the spawn pose before following.
-
-### Follow a path
-
-Edit `Control()` in `src/ardurover_nav/src/ardurover_controller.cpp`, then `./scripts/build.sh`.
-
-```bash
-source install/setup.bash
-ros2 launch ardurover_nav control.launch.py
-```
-
-This starts the simulation, RViz, and the controller. The reference path is green; the driven path is red. By default it follows `paths/recorded.path`.
-
-`paths/example.path` is a rectangle from spawn if you want to try without recording:
-
-```bash
-ros2 launch ardurover_nav control.launch.py \
-  path_file:=/home/developer/ardurover_navigation/paths/example.path
-```
-
-The node arms ArduRover, switches to GUIDED, and publishes body-frame velocity setpoints. You only implement the command.
-
-Allowed output: `geometry_msgs/Twist` on `/mavros/setpoint_velocity/cmd_vel_unstamped`
-
-- `linear.x` — forward speed (m/s), clamped to `v_max` (default 1.2)
-- `angular.z` — yaw rate (rad/s), clamped to `w_max` (default 1.0)
-
-Do not upload missions or use position setpoints.
-
-### Score
-
-`path_scorer_node` (started by `control.launch.py`) samples the rover pose and writes `paths/score.txt` when the last waypoint is reached (within 1 m for 1 s) or after 180 s:
+`control.launch.py` starts `path_scorer_node`, which samples the rover pose and writes `paths/score.txt` when the last waypoint is reached (within 1 m for 1 s) or after 180 s:
 
 ```
 score = 100 * completion * exp(-rms_cte / 0.75) * exp(-max_cte / 4.0)
 ```
 
-- **completion** — fraction of path length reached (closest-point progress)
-- **rms_cte / max_cte** — RMS and max distance to the reference polyline (m)
+- **completion** — fraction of path length reached
+- **rms_cte / max_cte** — RMS and max distance to the reference path (m)
 
-Higher is better. A perfect run on the line to the end is 100.
+Higher is better. A perfect run along the whole path scores 100.
 
-## Layout
+## Deliverables
 
-| Path | Role |
-|---|---|
-| `src/ardurover_nav/src/ardurover_controller.cpp` | Your controller |
-| `src/ardurover_nav/src/path_recorder_node.cpp` | Records Gazebo pose |
-| `src/ardurover_nav/src/path_scorer_node.cpp` | Score |
-| `sim/worlds/baylands.sdf` | Map |
-| `sim/models/clearpath_husky/` | Rover |
-| `paths/` | Path files (`x y yaw`) |
+- Implementation of the controller, along with any other code you changed. Ideally a fork of this repo and a link to it. Your code should run, I can clone your repo, run this command and see your controller following 3 different path that come with this repo
 
-## Notes
+    ```bash
+    ros2 launch ardurover_nav control.launch.py path_file:=/home/developer/ardurover_navigation/paths/0-drive-straight.path
+    ```
 
-- Headless Gazebo: `ros2 launch ardurover_nav sim.launch.py gz_gui:=false`
+    ```bash
+    ros2 launch ardurover_nav control.launch.py path_file:=/home/developer/ardurover_navigation/paths/1-drive-with-turns.path
+    ```
+
+    ```bash
+    ros2 launch ardurover_nav control.launch.py path_file:=/home/developer/ardurover_navigation/paths/2-complicated.path
+    ```
+
+- A short report documenting how the controller works. For example, if you used a PID controller, explain the principle, which commands you send, how they are calculated, and include any mathematical formulas.
+- Optional: a video of the Gazebo and RViz screens showing the controller following a given path.
+
+# Setup Instructions
+## Local development environment
+ _The code was tested and run on Ubuntu 24 system with NVIDIA GPU, it is not guaranteed it will work well on Windows or Mac operating system. If you don't have access to Ubuntu computer you can try to adapt this repor to run in another operating system, but this is not recommended._
+
+You need Docker, X11, and [QGroundControl](https://docs.qgroundcontrol.com/master/en/qgc-user-guide/getting_started/download_and_install.html). A GPU is optional.
+
+```bash
+cd /path/to/ardurover_navigation
+./docker/build.sh          # can take some time, be oatient
+./docker/run.sh            # opens a shell in the container
+```
+
+`./docker/run.sh` again attaches if the container already exists. Extra shells: `./docker/attach.sh`.
+
+Build the code inside the container:
+
+```bash
+./scripts/build.sh
+source /opt/ros/jazzy/setup.bash
+source install/setup.bash
+```
+
+Then use the launch commands from the assignment section above.
+
+To run simulation only withou the controller
+```bash
+ros2 launch ardurover_nav sim.launch.py
+```
+
+or to test your controller
+
+```bash
+ros2 launch ardurover_nav control.launch.py path_file:=/home/developer/ardurover_navigation/paths/0-drive-straight.path
+```
+
+## VS Code / Cursor
+
+Attaching the editor to the container is optional. See [dev-env-setup.md](dev-env-setup.md).
+
+## Connect from QGroundControl
+
+On the host, add a UDP connection to `127.0.0.1:14550` (or wait for auto-connect). Use this to arm in **Manual** / **Acro** and drive with a joystick or QGC virtual joystick.
+
+## Record a path
+
+1. Start the simulation only: `ros2 launch ardurover_nav sim.launch.py`
+2. Connect QGroundControl, arm, and drive the rover.
+3. In a second container shell:
+
+```bash
+ros2 run ardurover_nav path_recorder_node
+```
+
+The node samples `x y yaw` every 200 ms from `/ground_truth/odom` and writes `paths/recorded.path`. Ctrl+C saves the file.
+
+Restart the sim so the rover is back at spawn before following the path.

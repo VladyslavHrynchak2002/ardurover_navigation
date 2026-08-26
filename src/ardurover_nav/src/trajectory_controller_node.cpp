@@ -28,7 +28,6 @@ class TrajectoryControllerNode : public rclcpp::Node {
             throw std::runtime_error("Path file is empty: " + pathFile_);
         }
 
-        cmdPub_ = create_publisher<geometry_msgs::msg::Twist>("/mavros/setpoint_velocity/cmd_vel_unstamped", 10);
         markerPub_ =
             create_publisher<visualization_msgs::msg::MarkerArray>("/path_markers", rclcpp::QoS(1).transient_local());
         odomSub_ = create_subscription<nav_msgs::msg::Odometry>(
@@ -63,9 +62,6 @@ class TrajectoryControllerNode : public rclcpp::Node {
         }
 
         if (!controller_->SetupArdurover()) {
-            geometry_msgs::msg::Twist prime;
-            prime.linear.x = 0.001;
-            cmdPub_->publish(prime);
             return;
         }
 
@@ -73,8 +69,7 @@ class TrajectoryControllerNode : public rclcpp::Node {
             return;
         }
 
-        geometry_msgs::msg::Twist command = controller_->Control(*latestOdom_);
-        cmdPub_->publish(command);
+        controller_->Control(*latestOdom_);
     }
 
     void UpdateDrivenPath() {
@@ -132,7 +127,6 @@ class TrajectoryControllerNode : public rclcpp::Node {
     nav_msgs::msg::Odometry::ConstSharedPtr latestOdom_;
     std::unique_ptr<ArduroverController> controller_;
 
-    rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmdPub_;
     rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr markerPub_;
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odomSub_;
     rclcpp::TimerBase::SharedPtr timer_;

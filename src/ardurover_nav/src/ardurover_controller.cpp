@@ -13,10 +13,6 @@ ArduroverController::ArduroverController(rclcpp::Node &node, std::vector<Waypoin
 }
 
 bool ArduroverController::SetupArdurover() {
-    // Implement custom setup here, if needed.
-    // The example above set the rover into GUIDED mode and Arms it.
-
-
     switch (setupState_) {
         case SetupState::WaitServices:
             if (arming_->service_is_ready() && setMode_->service_is_ready()) {
@@ -70,18 +66,10 @@ bool ArduroverController::SetupArdurover() {
     return false;
 }
 
-// Implement path following here.
-//
-// Input:  latest Gazebo pose/twist in odom, reference path in path_
-//         (x, y in metres, yaw in radians, world ENU, no timestamps).
-// Output: body-frame Twist
-//         linear.x  = forward speed (m/s)
-//         angular.z = yaw rate (rad/s)
-// Do not upload missions or publish position setpoints.
-geometry_msgs::msg::Twist ArduroverController::Control(const nav_msgs::msg::Odometry & /*odometry*/) {
-    geometry_msgs::msg::Twist command;
-    command.linear.x = 0.8;
-    return command;
+void ArduroverController::Control(const nav_msgs::msg::Odometry & /*odometry*/) {
+    // Implement the control logic here.
+    // Feel free to modify the whole controller class as you see fit.
+    // You will need to figure out how to send the command to the flight controller through MAVROS
 }
 
 }  // namespace ardurover_nav
