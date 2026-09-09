@@ -61,10 +61,6 @@ The controller publishes `geometry_msgs/TwistStamped` on `/mavros/setpoint_veloc
 - `twist.linear.x = v` — forward speed in the rover's body frame
 - `twist.angular.z = ω` — turn rate in the rover's body frame
 
-`SetupArdurover()` sets the MAVROS parameter `mav_frame = BODY_NED` before control starts, so
-ArduRover interprets `linear.x`/`angular.z` as body-frame forward speed and yaw rate rather
-than world-frame velocity components — matching how the curvature/speed command above is
-derived.
 
 ## Tuning parameters
 
